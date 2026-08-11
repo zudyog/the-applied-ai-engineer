@@ -1,0 +1,10 @@
+# ── API ───────────────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+pydantic
+
+# ── Cross-encoder reranker — Chapter 4 ───────────────────────────────────────
+sentence-transformers
+# torch is a transitive dependency of sentence-transformers. The Dockerfile
+# installs the CPU-only build separately to keep the image small:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu

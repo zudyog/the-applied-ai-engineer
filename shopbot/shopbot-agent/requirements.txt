@@ -1,0 +1,48 @@
+# ── Core API ──────────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+
+# ── LangChain OpenAI — used by retrieval/shadow.py (Chapter 2 shadow reads) ───
+langchain-openai
+
+# ── ChromaDB — retrieval/shadow.py primary reader during migration (Chapter 2) ─
+# Reads the chroma_db/ produced by shopbot-ingest; point ChromaDB at that path
+# (see shopbot-agent/CLAUDE.md) if shadow.py is ever run again.
+chromadb==0.6.3
+
+# ── OpenAI ───────────────────────────────────────────────────────────────────
+openai
+tiktoken
+
+# ── Qdrant Cloud — Chapter 2 migration, all retrieval + cache reads ──────────
+qdrant-client
+
+# ── BM25 sparse encoder — Chapter 3 hybrid search (query time) ──────────────
+fastembed
+
+# ── Cross-encoder reranker — Chapter 4 ───────────────────────────────────────
+# NOT installed here. Reranking always runs in ../shopbot-rerank/, a separate
+# standalone project (its own Dockerfile installs sentence-transformers + torch).
+# This process only ever talks to it over HTTP — see retrieval/rerank_client.py.
+
+# ── Redis — Chapter 6 session memory + Chapter 7 cache ───────────────────────
+redis
+
+# ── Async HTTP client — Chapter 9 rerank microservice + load test ─────────────
+httpx
+
+# ── Google Sheets — Chapter 8 RAGAS Monday ritual ────────────────────────────
+gspread
+
+# ── MLflow experiment tracking + tracing (Chapter 8 eval + Chapter 9 API) ────
+mlflow
+
+# ── Evaluation ───────────────────────────────────────────────────────────────
+# ragas==0.1.22 pinned — evaluate.py + eval/run_ragas.py written against this version
+# (asyncio monkeypatch targets its internals; do NOT upgrade without re-testing)
+ragas==0.1.22
+# numpy: let pip resolve — chromadb/fastembed need 2.x; ragas 0.1.22 works with it
+datasets
+nest_asyncio
