@@ -48,38 +48,52 @@ Book 1 shipped a working RAG pipeline and measured it honestly — Faithfulness 
 
 This codebase is split into **four standalone projects** — a deliberate change from Book 1's single `shopbot/` directory. Each project below shares no code and no dependencies with its siblings; they communicate only over HTTP or through the Qdrant collection one writes and the others read.
 
-```
-shopbot/shopbot-ingest/   ← Build-time: chunk + embed + write catalog to Qdrant   (no server)
-shopbot/shopbot-agent/     ← FastAPI RAG backend — the /ask endpoint              (port 8000)
-shopbot/shopbot-rerank/     ← Cross-encoder reranking microservice, standalone    (port 8001)
-shopbot/zudyog-fashion/      ← Next.js storefront + AI chat widget                (port 3000)
+```mermaid
+graph LR
+    WEB["zudyog-fashion<br/>:3000"] -->|"HTTP /ask"| AGENT["shopbot-agent<br/>:8000"]
+    AGENT -->|"HTTP /rerank"| RERANK["shopbot-rerank<br/>:8001"]
+
+    QDRANT[("Qdrant<br/>dense + BM25 sparse")]
+    REDIS[("Redis<br/>session + cache")]
+    MLFLOW[("MLflow<br/>request tracing")]
+
+    ING["shopbot-ingest"] -.->|"build-time write"| QDRANT
+    AGENT -->|"hybrid search"| QDRANT
+    AGENT -->|"session + 3-layer cache"| REDIS
+    AGENT -->|traces| MLFLOW
 ```
 
 **Request-time pipeline** (`shopbot-agent`, every `/ask` call):
 
-```
-POST /ask  (Pydantic-validated input)
-      │
-      ▼
-Session memory load (Redis) — recent turns, rolling summary, active SKUs
-      │
-      ▼
-Three-layer cache — exact match → semantic (≥0.97 cosine) → full pipeline
-      │  (cache miss ~78% of traffic)
-      ▼
-Query decomposition — 1 or 2 intents detected (gpt-4o-mini)
-      │
-      ▼
-Hybrid retrieval per sub-query — dense (Qdrant) + BM25, merged by RRF (k=60)
-      │
-      ▼
-Cross-encoder rerank (HTTP → shopbot-rerank) — top-20 → top-3, confidence floor 0.55
-      │
-      ▼
-Grounded prompt (evidence + question + conversation context) → gpt-4o-mini @ temp 0
-      │
-      ▼
-Answer — cache write, session update, traced to MLflow
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as shopbot-agent
+    participant R as Redis
+    participant Q as Qdrant
+    participant I as shopbot-rerank
+    participant L as OpenAI
+
+    C->>A: POST /ask {question, session_id}
+    A->>R: load session (recent turns, summary, active SKUs)
+    A->>R: check exact + semantic cache (≥0.97 cosine)
+    alt cache hit
+        R-->>A: cached answer
+    else cache miss (~78% of traffic)
+        A->>L: decompose query (1 or 2 intents, gpt-4o-mini)
+        L-->>A: sub-queries
+        loop each sub-query
+            A->>Q: hybrid search (dense + BM25, RRF k=60)
+            Q-->>A: top-20 candidates
+            A->>I: POST /rerank (candidates)
+            I-->>A: top-3, confidence floor 0.55
+        end
+        A->>L: generate grounded answer (gpt-4o-mini, temp 0)
+        L-->>A: answer
+        A->>R: write cache + update session
+    end
+    A-->>C: 200 {answer, session_id}
+    Note over A: traced to MLflow
 ```
 
 ## Tech stack
